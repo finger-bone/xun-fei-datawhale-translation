@@ -243,3 +243,204 @@ LSTM and GRU models are built-in in pytorch.
 The first solution would be a encoder-RNN-decoder model. The encoder takes the input sentence and encodes it into a fixed-length vector representation, which is then passed to the decoder to generate the output sentence.
 
 A basic encoder-decoder model is implemented under the code, task one folder. Which, doesn't perform well- or any at all, but it is a good starting point to understand the basic concepts of machine translation.
+
+Please notice that this is a oversimplified version that doesn't even perform in the task. And no terminology-based method, as the contest requires, is used in this model. Terminologies are only used to expand the vocabulary of the model. This is different from the provided model.
+
+### Dataloader
+
+First, load the data.
+
+```python
+class MTTrainDataset(Dataset):
+    
+    
+    def __init__(self, train_path, dic_path):
+        self.terms = [
+            {"en": l.split("\t")[0], "zh": l.split("\t")[1]} for l in open(dic_path).read().split("\n")[:-1]
+        ]
+        self.data = [
+            {"en": l.split("\t")[0], "zh": l.split("\t")[1]} for l in open(train_path).read().split("\n")[:-1]
+        ]
+        self.en_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased", cache_dir="../../../cache")
+        self.ch_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-chinese", cache_dir="../../../cache")
+        self.en_tokenizer.add_tokens([
+            term["en"] for term in self.terms
+        ])
+        self.ch_tokenizer.add_tokens([
+            term["zh"] for term in self.terms
+        ])
+                
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, index) -> dict:
+        return {
+            "en": self.en_tokenizer.encode(self.data[index]["en"]),
+            "zh": self.ch_tokenizer.encode(self.data[index]["zh"]),
+        }
+    
+    def get_raw(self, index):
+        return self.data[index]
+
+ds = MTTrainDataset("./data/train.txt", "./data/en-zh.dic")
+```
+
+### Encoder
+
+Create the encoder, encoder first does embedding, then use RNN to encode the input.
+
+```python
+# Encoder encodes the input sequence into a sequence of hidden states
+class Encoder(nn.Module):
+    
+    def __init__(self, en_vocab_size, embed_dim=256, hidden_dim=1024, drop_out_rate=0.1):
+        super(Encoder, self).__init__()
+        self.hidden_dim = hidden_dim
+        # [batch, len] -> [batch, len, embed_dim]
+        self.embed = nn.Embedding(en_vocab_size, embed_dim)
+        # [len, batch, embed_dim] -> [len, batch, hidden_dim], [n_layers == 1, batch, hidden_dim]
+        self.gru = nn.GRU(embed_dim, hidden_dim)
+        self.dropout = nn.Dropout(drop_out_rate)
+    
+    def init_hidden(self, batch_size):
+        # [n_layers == 1, batch, hidden_dim]
+        return th.zeros(1, batch_size, self.hidden_dim).to(device)
+    
+    def forward(self, x):
+        x = self.embed(x)
+        x = self.dropout(x)
+        h = self.init_hidden(x.size(0))
+       
+```
+
+### Decoder
+
+Then the decoder. Please notice that, the decoder only outputs the next token in the output sequence. In the forward function, `x` is the input token, the translated token sequence to be in the context, and `h` is the encoded hidden state of the original input sequence, which contains the information of the input sequence.
+
+```python
+class Decoder(nn.Module):
+    
+    def __init__(self, zh_vocab_size, embed_dim=256, hidden_dim=1024, drop_out_rate=0.1) -> None:
+        super().__init__()
+        # [batch, len == 1] -> [batch, len == 1, embed_dim]
+        self.embed = nn.Embedding(zh_vocab_size, embed_dim)
+        # [batch, len == 1, embed_dim] -> [batch, len == 1, hidden_dim], [n_layers, batch, hidden_dim]
+        self.gru = nn.GRU(embed_dim, hidden_dim)
+        # [batch, hidden_dim] -> [batch, zh_vocab_size]
+        self.fc = nn.Linear(hidden_dim, zh_vocab_size)
+        self.dropout = nn.Dropout(drop_out_rate)
+        
+    def forward(self, x, h):
+        x = self.embed(x)
+        x = self.dropout(x)
+        x = x.permute(1, 0, 2)
+        x, h = self.gru(x, h)
+        x = x.permute(1, 0, 2)
+        x = self.fc(x.squeeze(1))
+        return x, h
+```
+
+### Seq2Seq Model
+
+Then create the model, which is a combination of the encoder and the decoder.
+
+```python
+class Seq2Seq(nn.Module):
+    
+    def __init__(self, encoder, decoder):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        
+    def forward(self, src, trg, src_tokenizer, trg_tokenizer, teacher_forcing_ratio=0.5):
+        # src: [batch, src_len]
+        # trg: [batch, target_len]
+        batch_size = src.size(0)
+        trg_len = trg.size(1)
+        trg_vocab_size = self.decoder.fc.out_features
+        outputs = th.ones(batch_size, trg_len, trg_vocab_size).mul(trg_tokenizer.cls_token_id).to(src.device)
+        # encoder
+        # enc_out: [batch, src_len, hidden_dim], enc_hidden: [n_layers, batch, hidden_dim]
+        enc_out, enc_hidden = self.encoder(src)
+        # decoder
+        # dec_in: [batch, 1]
+        dec_in = trg[:, 0]
+        dec_hidden = enc_hidden
+        for t in range(1, trg_len):
+            dec_out, dec_hidden = self.decoder(dec_in.unsqueeze(1), dec_hidden)
+            # dec_out: [batch, zh_vocab_size]
+            outputs[:, t] = dec_out.squeeze(1)
+            # dec_in: [batch]
+            dec_in = dec_out.argmax(-1)
+            if th.rand(1) < teacher_forcing_ratio:
+                dec_in = trg[:, t]
+            if (dec_in == trg_tokenizer.sep_token_id).all():
+                if t < trg_len - 1:
+                    outputs[:, t+1] = trg_tokenizer.sep_token_id
+                    outputs[:, t+2:] = trg_tokenizer.pad_token_id
+                break
+        return outputs
+```
+
+Teacher forcing means to use the answer token as the input token in the next time slice when generating the output sequence. This is to help the model to learn the correct translation sequence faster. When doing actual generation, the ratio should be set to zero, so that the model can generate the sequence on its own.
+
+This code uses bert tokenizer, so the beginning of sentence is actually `cls` token, whereas the end of sentence is `sep` token.
+
+### Padding
+
+Before training, also pad the input to train in batches.
+
+```python
+def collect_fn(batch):
+    # pad the batch
+    src = [th.tensor(item["en"]) for item in batch]
+    trg = [th.tensor(item["zh"]) for item in batch]
+    src = th.nn.utils.rnn.pad_sequence(src, batch_first=True, padding_value=ds.en_tokenizer.pad_token_id)
+    trg = th.nn.utils.rnn.pad_sequence(trg, batch_first=True, padding_value=ds.ch_tokenizer.pad_token_id)
+    return src, trg
+```
+
+### Training
+
+Use train the model with the following code, remember to set `ignore_index` in the loss function to ignore the padding token.
+
+```python
+def train(epochs, total = None, logging_steps=100):
+    loss_logging = []
+    criterion = nn.CrossEntropyLoss(ignore_index=ds.ch_tokenizer.pad_token_id)
+    for epoch in trange(epochs):
+        for i, (src, trg) in tqdm(enumerate(train_loader), total=total if total is not None else len(train_loader), leave=False):
+            optim.zero_grad()
+            src = src.to(device)
+            trg = trg.to(device)
+            out = model(src, trg, ds.en_tokenizer, ds.ch_tokenizer, teacher_forcing_ratio=0.5)
+            # out is [batch, len, zh_vocab_size]
+            # trg is [batch, len]
+            loss = criterion(out.view(-1, len(ds.ch_tokenizer)), trg.view(-1))
+            loss_logging.append(loss.item())
+            loss.backward()
+            optim.step()
+            if i % logging_steps == 0:
+                print(f"Epoch: {epoch}, Step: {i}, Loss: {loss.item()}")
+            if total is not None and i >= total:
+                break
+    return loss_logging
+```
+
+### Generating
+
+```python
+def generate(src, trg):
+    with th.no_grad():
+        src = th.tensor(src).unsqueeze(0).to(device)
+        trg = th.tensor(trg).unsqueeze(0).to(device)
+        out = model(src, trg, ds.en_tokenizer, ds.ch_tokenizer, teacher_forcing_ratio=0)
+    # out is [batch, len, zh_vocab_size]
+    out = out.squeeze(0)
+    out = out.argmax(-1)
+    return ds.ch_tokenizer.decode(out.tolist())
+```
+
+### Results
+
+Well the result sucks, but it works. So long as there is a `[SEP]` in most of the generated result, it is a good sign that the model is learning to generate the sequence, despite its poor performance.
