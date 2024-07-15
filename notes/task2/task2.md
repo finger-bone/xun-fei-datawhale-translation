@@ -10,7 +10,7 @@ In task one, there was a encoder-decoder model with rnn networks. However, it be
 
 However, that model got the greater part of the job done. It could translate simple sentences, but it failed for more complex ones. The model was trained on a small dataset, which is not enough to learn the complex patterns of the language. Now, we just need to improve the encoder and decoders.
 
-## Attention Mechanism
+## Linear Attention Mechanism
 
 Attention mechanism, to put simply, is to weight the importance of different parts of the input sequence. It is a mechanism that allows the model to focus on different parts of the input sequence.
 
@@ -50,9 +50,10 @@ class Decoder(nn.Module):
         self.embed = nn.Embedding(zh_vocab_size, embed_dim)
         # [len == 1, batch, embed_dim + hidden_dim] -> [len == 1, batch, hidden_dim], [n_layers, batch, hidden_dim]
         self.gru = nn.GRU(embed_dim + hidden_dim, hidden_dim)
-        # [batch, hidden_dim] -> [batch, zh_vocab_size]
-        self.fc = nn.Linear(hidden_dim, zh_vocab_size)
+        # [batch, hidden_dim * 2 + embed_dim] -> [batch, zh_vocab_size]
+        self.fc = nn.Linear(hidden_dim * 2 + embed_dim, zh_vocab_size)
         self.dropout = nn.Dropout(drop_out_rate)
+        self.activation = nn.Tanh()
         
     def forward(self, x, h, enc_out):
         # enc_out: [batch, len, hidden_dim]
@@ -68,13 +69,23 @@ class Decoder(nn.Module):
         # x: [batch, len == 1, embed_dim]
         x = self.dropout(x)
         rx = th.cat((v, x), dim=-1)
+        rx = self.activation(rx)
         # rx: [batch, len == 1, embed_dim + hidden_dim]
         rx = rx.permute(1, 0, 2)
         out_x, h = self.gru(rx, h)
         out_x = out_x.permute(1, 0, 2)
-        out_x = self.fc(out_x.squeeze(1))
+        # out_x: [batch, len == 1, hidden_dim]
+        out_x = out_x.squeeze(1)
+        v = v.squeeze(1)
+        fc_in = th.cat((out_x, v, x.squeeze(1)), dim=-1)
+        
+        out_x = self.fc(fc_in)
         return out_x, h
 ```
+
+The result is still horrible. Yet, compared to the previous model, the model can get the length of the sentence almost correct. In addition, the loss drop is obviously faster than the previous model, with the bottleneck loss of the model being `4` instead of `5`.
+
+Nevertheless, the model is still scarcely usable.
 
 ## Self Attention Mechanism
 
@@ -126,7 +137,7 @@ class SelfAttention(nn.Module):
         self.Q = nn.Linear(embed, d)
         self.K = nn.Linear(embed, d)
         self.V = nn.Linear(embed, d)
-        
+        self.d = d
     
     def forward(self, x):
         # x is [batch, len, embed]
@@ -140,11 +151,89 @@ class SelfAttention(nn.Module):
         # QK^T / sqrt(d) is [batch, len, len]
         # softmax(QK^T / sqrt(d)) is [batch, len, len]
         # softmax(QK^T / sqrt(d))V is [batch, len, d]
-        attn = torch.matmul(Q, K.transpose(-2, -1)) / (d ** 0.5)
+        attn = torch.matmul(Q, K.transpose(-2, -1)) / (self.d ** 0.5)
         attn = torch.softmax(attn, dim=-1)
         out = torch.matmul(attn, V)
         return out
 ```
 
-## Integrate Self Attention into the RNN
+### Using Self Attention in the Encoder
 
+The self attention mechanism can be used in the encoder to improve the performance of the model. The encoder will be able to focus on different parts of the input sequence, which will help the decoder to generate the output sequence.
+
+```python
+class Encoder(nn.Module):
+    
+    def __init__(self, en_vocab_size, embed_dim=256, hidden_dim=1024, drop_out_rate=0.1) -> None:
+        super().__init__()
+        self.embed = nn.Embedding(en_vocab_size, embed_dim)
+        self.attn = SelfAttention(embed_dim, hidden_dim)
+        self.gru = nn.GRU(embed_dim, hidden_dim)
+        self.fc = nn.Linear(hidden_dim, en_vocab_size)
+        self.dropout = nn.Dropout(drop_out_rate)
+        self.activation = nn.Tanh()
+        
+    def forward(self, x):
+        # x is [batch, len]
+        x = self.embed(x)
+        # x is [batch, len, embed_dim]
+        x = self.dropout(x)
+        x = self.attn(x)
+        # x is [batch, len, embed_dim]
+        x = self.activation(x)
+        x = x.permute(1, 0, 2)
+        out, h = self.gru(x)
+        out = out.permute(1, 0, 2)
+        out = out.squeeze(1)
+        out = self.fc(out)
+        return out, h
+```
+
+This implementation is still very poor, but it is a step in the right direction.
+
+## Multi-Head Self Attention
+
+The self attention mechanism can be improved by using multiple heads. The multi-head self attention mechanism is a mechanism that allows the model to focus on different parts of the input sequence.
+
+To put it more simply, the multi-head mechanism is to use multiple self attention layers in parallel, and then concatenate the results. The multi-head mechanism can help the model to focus on different parts of the input sequence.
+
+The math is as follows,
+
+$$
+\text{MultiHead}(Q, K, V) = \text{Concat}(\text{Head}_1, \text{Head}_2, \ldots, \text{Head}_n)W^O
+$$
+
+where $\text{Head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$, and $W^O$ is a linear transformation.
+
+An simple implementation is as follows,
+
+```python
+class MultiHeadSelfAttention(nn.Module):
+    def __init__(self, embed, d, out_dim, n_heads):
+        super(MultiHeadSelfAttention, self).__init__()
+        self.heads = nn.ModuleList([SelfAttention(embed, d) for _ in range(n_heads)])
+        self.fc = nn.Linear(n_heads * d, out_dim)
+    
+    def forward(self, x):
+        # x is [batch, len, embed]
+        # heads is [n_heads, batch, len, d]
+        heads = [head(x) for head in self.heads]
+        # heads is [batch, len, n_heads * d]
+        heads = torch.cat(heads, dim=-1)
+        out = self.fc(heads)
+        return out
+```
+
+## Other Improvements
+
+Without tweaking the model too much, here are some other improvements that can be made to the model.
+
+- Use LSTM instead of GRU. LSTM is more powerful than GRU, and it can learn more complex patterns in the data.
+- Increase the `n_layers` of the encoder and decoder. Increasing the number of layers will help the model to learn more complex patterns in the data.
+- Use multi-head self attention in the encoder and decoder.
+- Use more dropout since it is obvious that the model is over-fitting, for continuously generating the same words.
+- Adding extra residual connections in the model.
+- Performing layer normalization after each layer.
+- Increase the size of `hidden_dim` and `d`.
+
+During the training, there was also a `nan` loss problem caused by the `nan` in gradient. When encountering such problem, enforcing gradient clipping or simply decrease the learning rate can solve the problem.
