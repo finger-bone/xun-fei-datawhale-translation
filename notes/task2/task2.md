@@ -218,15 +218,13 @@ class Encoder(nn.Module):
                  embed_dim=256, 
                  hidden_dim=1024, 
                  n_layers=2,
-                 heads=2,
                  drop_out_rate=0.5):
         super(Encoder, self).__init__()
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
         # [batch, len] -> [batch, len, embed_dim]
         self.embed = nn.Embedding(en_vocab_size, embed_dim)
-        # [batch, len, embed_dim] -> [batch, len, embed_dim]
-        self.attn = MultiHeadAttention(embed_dim, embed_dim, embed_dim, heads)
+        self.layer_norm = nn.LayerNorm(embed_dim)
         # [len, batch, embed_dim] -> [len, batch, hidden_dim], [n_layers, batch, hidden_dim]
         self.rnn = nn.GRU(embed_dim, hidden_dim, n_layers)
         self.dropout = nn.Dropout(drop_out_rate)
@@ -238,7 +236,7 @@ class Encoder(nn.Module):
     def forward(self, x):
         x = self.embed(x)
         x = self.dropout(x)
-        x = self.attn(x)
+        x = self.layer_norm(x)
         h = self.init_hidden(x.size(0))
         # gru is [len, batch, hidden_dim]
         # so got to rearrange x to [len, batch, embed_dim]

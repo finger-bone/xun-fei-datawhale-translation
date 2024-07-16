@@ -14,4 +14,16 @@ Transformer architecture is also a multi-encoder-multi-decoder architecture. Som
 
 #### Input Embedding and Positional Encoding
 
-Except for the normal tokenization and embedding, another important part of the input is the positional encoding in the transformer architecture. The reason for that is that the transformer architecture does not have any recurrence or convolution, so the model does not know the order of the words in the sentence. The positional encoding is added to the input embeddings to give the model information about the position of the words in the sentence.
+Embedding and tokenization have already been introduced in previous parts.
+
+Except for the normal tokenization and embedding, another important part of the input is the positional encoding in the transformer architecture.
+
+The necessity of positional encoding is justified by the fact that the transformer architecture does not have any recurrence or convolution, in other words, it doesn't process the input token-by-token, and thus it fails to capture the position of the tokens in the input sequence.
+
+To deal with the problem, instead of sending in only the embeddings of the tokens, the positional encoding is added to the embeddings. The positional encoding is a vector that is added to the embeddings of the tokens, and it is calculated by the following formula,
+
+$$PE_{(pos, 2i)} = \sin(pos / 10000^{2i / d_{model}})$$
+
+$$PE_{(pos, 2i+1)} = \cos(pos / 10000^{2i / d_{model}})$$
+
+where $pos$ is the position of the token in the input sequence, $i$ is the index of the dimension of the positional encoding, and $d_{model}$ is the dimension of the model.
