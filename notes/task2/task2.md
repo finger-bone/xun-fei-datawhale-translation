@@ -8,7 +8,7 @@ The second task aims to improve the performance of the original encoder-rnn-deco
 
 In task one, there was a encoder-decoder model with rnn networks. However, it behaved poorly due to, mainly, the context compression. The encoder compresses the context into a fixed-length vector, which is not enough to store all the information. It may work for short sentences, but it fails for longer ones.
 
-However, that model got the greater part of the job done. It could translate simple sentences, but it failed for more complex ones. The model was trained on a small dataset, which is not enough to learn the complex patterns of the language. Now, we just need to improve the encoder and decoders.
+However, that model got the greater part of the job done. The model was trained on a small dataset, which is not enough to learn the complex patterns of the language. Now, we just need to improve the encoder and decoders.
 
 ## Linear Attention Mechanism
 
@@ -161,40 +161,6 @@ class SelfAttention(nn.Module):
         return out
 ```
 
-### Using Self Attention in the Encoder
-
-The self attention mechanism can be used in the encoder to improve the performance of the model. The encoder will be able to focus on different parts of the input sequence, which will help the decoder to generate the output sequence.
-
-```python
-class Encoder(nn.Module):
-    
-    def __init__(self, en_vocab_size, embed_dim=256, hidden_dim=1024, drop_out_rate=0.1) -> None:
-        super().__init__()
-        self.embed = nn.Embedding(en_vocab_size, embed_dim)
-        self.attn = SelfAttention(embed_dim, hidden_dim)
-        self.gru = nn.GRU(embed_dim, hidden_dim)
-        self.fc = nn.Linear(hidden_dim, en_vocab_size)
-        self.dropout = nn.Dropout(drop_out_rate)
-        self.activation = nn.Tanh()
-        
-    def forward(self, x):
-        # x is [batch, len]
-        x = self.embed(x)
-        # x is [batch, len, embed_dim]
-        x = self.dropout(x)
-        x = self.attn(x)
-        # x is [batch, len, embed_dim]
-        x = self.activation(x)
-        x = x.permute(1, 0, 2)
-        out, h = self.gru(x)
-        out = out.permute(1, 0, 2)
-        out = out.squeeze(1)
-        out = self.fc(out)
-        return out, h
-```
-
-This implementation is still very poor, but it is a step in the right direction.
-
 ## Multi-Head Self Attention
 
 The self attention mechanism can be improved by using multiple heads. The multi-head self attention mechanism is a mechanism that allows the model to focus on different parts of the input sequence.
@@ -207,7 +173,7 @@ $$
 \text{MultiHead}(Q, K, V) = \text{Concat}(\text{Head}_1, \text{Head}_2, \ldots, \text{Head}_n)W^O
 $$
 
-where $\text{Head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$, and $W^O$ is a linear transformation.
+where $\text{Head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$ is a sub-attention, and $W^O$ is a linear transformation.
 
 An simple implementation is as follows,
 
@@ -346,4 +312,14 @@ class Decoder(nn.Module):
         return out_x, h
 ```
 
-The `contiguous` function is called, because when running on a multi-GPU environment, the tensor must be contiguous, in other words, the memory must be continuous, to be able to be transferred between GPUs.
+There are also other things to note.
+
+- The `contiguous` function is called, because when running on a multi-GPU environment, the tensor must be contiguous, in other words, the memory must be continuous, to be able to be transferred between GPUs.
+
+- Make sure to increase `dropout` to a large value so that the model does not over-fit.
+
+- If training on a multi-GPU environment, the model must be wrapped in `nn.DataParallel` to be able to run on multiple GPUs.
+
+- `pytorch` has a sort of feature-like bug, that is, when creating multiple tensor with different shapes, it will create cache for each shape, which will consume a lot of memory. To solve this problem, use `torch.cuda.empty_cache()` to clear the cache, which may work. A better way to get around would be to pad the tensor to the same length or the multiple of the same length. I didn't know that before so it's not in the code, but the memory was substantially higher than it should be, and the training was very slow.
+
+- enable truncating, or else some very long outliers will cause out of memory error.
