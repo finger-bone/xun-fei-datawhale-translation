@@ -39,6 +39,10 @@ class Attention(nn.Module):
         return th.softmax(attn, dim=-1)
 ```
 
+In the code above, the `attn` assumes the role of the attention, which is a tensor of shape $(batch, len)$, where $len$ is the length of the input sequence. So, each element of the tensor refers to the importance of the corresponding part of the input sequence.
+
+Using that, we can pay attention to the output vector of the encoder so that we can focus on different parts of the input sequence.
+
 ```python
 class Decoder(nn.Module):
     
@@ -83,7 +87,7 @@ class Decoder(nn.Module):
         return out_x, h
 ```
 
-The result is still horrible. Yet, compared to the previous model, the model can get the length of the sentence almost correct. In addition, the loss drop is obviously faster than the previous model, with the bottleneck loss of the model being `4` instead of `5`.
+The result is still horrible. Yet, compared to the previous model, the model can get the length of the sentence almost correct, and it shows some sign of understanding the sentence. After fully training on the provided dataset for one epoch, a much, much better score is achieved.
 
 Nevertheless, the model is still scarcely usable.
 
@@ -237,3 +241,109 @@ Without tweaking the model too much, here are some other improvements that can b
 - Increase the size of `hidden_dim` and `d`.
 
 During the training, there was also a `nan` loss problem caused by the `nan` in gradient. When encountering such problem, enforcing gradient clipping or simply decrease the learning rate can solve the problem.
+
+Utilizing the previous mentioned techniques, a better result was achieved. With the encoder of
+
+```python
+class Encoder(nn.Module):
+    
+    def __init__(self, 
+                 en_vocab_size, 
+                 embed_dim=256, 
+                 hidden_dim=1024, 
+                 n_layers=2,
+                 heads=2,
+                 drop_out_rate=0.5):
+        super(Encoder, self).__init__()
+        self.n_layers = n_layers
+        self.hidden_dim = hidden_dim
+        # [batch, len] -> [batch, len, embed_dim]
+        self.embed = nn.Embedding(en_vocab_size, embed_dim)
+        # [batch, len, embed_dim] -> [batch, len, embed_dim]
+        self.attn = MultiHeadAttention(embed_dim, embed_dim, embed_dim, heads)
+        # [len, batch, embed_dim] -> [len, batch, hidden_dim], [n_layers, batch, hidden_dim]
+        self.rnn = nn.GRU(embed_dim, hidden_dim, n_layers)
+        self.dropout = nn.Dropout(drop_out_rate)
+    
+    def init_hidden(self, batch_size):
+        # [n_layers, batch, hidden_dim]
+        return th.zeros(self.n_layers, batch_size, self.hidden_dim).to(device)
+    
+    def forward(self, x):
+        x = self.embed(x)
+        x = self.dropout(x)
+        x = self.attn(x)
+        h = self.init_hidden(x.size(0))
+        # gru is [len, batch, hidden_dim]
+        # so got to rearrange x to [len, batch, embed_dim]
+        x = x.permute(1, 0, 2).contiguous()
+        x, h = self.rnn(x, h)
+        # change back to [batch, len, hidden_dim]
+        x = x.permute(1, 0, 2).contiguous()
+        return x, h
+```
+
+And the decoder of,
+
+```python
+class Decoder(nn.Module):
+    
+    def __init__(self, 
+                 zh_vocab_size, 
+                 embed_dim=256, 
+                 hidden_dim=1024, 
+                 n_layers=2,
+                 heads=2,
+                 drop_out_rate=0.5) -> None:
+        super().__init__()
+        # input -> [batch, len]
+        
+        # [batch, len, hidden_dim] -> [batch, len, hidden_dim]
+        self.attn = MultiHeadAttention(hidden_dim, hidden_dim, hidden_dim, heads)
+        # [batch, len, hidden_dim] -> [batch, len, hidden_dim]
+        self.enc_out_attn = MultiHeadAttention(hidden_dim, hidden_dim, hidden_dim, heads)
+        # [batch, len == 1] -> [batch, len == 1, embed_dim]
+        self.embed = nn.Embedding(zh_vocab_size, embed_dim)
+        self.linear_attn = Attention(hidden_dim, hidden_dim)
+        # [len == 1, batch, embed_dim + hidden_dim] -> [len == 1, batch, hidden_dim], [n_layers, batch, hidden_dim]
+        self.rnn = nn.GRU(embed_dim + hidden_dim, hidden_dim, n_layers)
+        # [batch, hidden_dim * 2 + embed_dim] -> [batch, zh_vocab_size]
+        self.fc = nn.Linear(hidden_dim * 2 + embed_dim, zh_vocab_size)
+        self.dropout = nn.Dropout(drop_out_rate)
+        self.activation = nn.Tanh()
+        
+    def forward(self, x, h, enc_out):
+        # enc_out: [batch, len, hidden_dim]
+        # x is [batch, len == 1]
+        # h is [n_layers, batch, hidden_dim]
+        h = h.permute(1, 0, 2).contiguous()
+        h = self.attn(h)
+        h = h.permute(1, 0, 2).contiguous()
+        
+        # enc_out: [batch, len, hidden_dim]
+        enc_out = self.enc_out_attn(enc_out)
+        # [batch, len, hidden_dim] -> [batch, len == 1, hidden_dim]
+        # [batch, 1, hidden_dim] * [batch, len, hidden_dim] -> [batch, len == 1, hidden_dim]
+        # So get a matrix of [batch, 1, hidden_dim] for each batch
+        attn = self.linear_attn(enc_out, h)
+        v = th.bmm(attn.unsqueeze(1), enc_out)
+        
+        x = self.embed(x)
+        # x: [batch, len == 1, embed_dim]
+        x = self.dropout(x)
+        rx = th.cat((v, x), dim=-1)
+        rx = self.activation(rx)
+        # rx: [batch, len == 1, embed_dim + hidden_dim]
+        rx = rx.permute(1, 0, 2).contiguous()
+        out_x, h = self.rnn(rx, h)
+        out_x = out_x.permute(1, 0, 2).contiguous()
+        # out_x: [batch, len == 1, hidden_dim]
+        out_x = out_x.squeeze(1)
+        v = v.squeeze(1)
+        fc_in = th.cat((out_x, v, x.squeeze(1)), dim=-1)
+        
+        out_x = self.fc(fc_in)
+        return out_x, h
+```
+
+The `contiguous` function is called, because when running on a multi-GPU environment, the tensor must be contiguous, in other words, the memory must be continuous, to be able to be transferred between GPUs.
