@@ -1,0 +1,14 @@
+# pixi environments
+.pixi
+*.egg-info
+
+data
+
+test
+
+.ipynb_checkpoints
+cache
+pixi.lock
+
+.DS_Store
+submit.txt
