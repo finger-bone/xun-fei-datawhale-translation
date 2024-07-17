@@ -18,11 +18,15 @@ The general structure is as follows,
 
 ![Transformers Architecture](image.png)
 
-The encoder part consists of an input block to process the input, and several encoder blocks to process the input sequentially.
+Which can be expressed as,
 
-The decoder part consists of several pre-encoder decoder blocks to process the previously generated tokens, a next-to-encoder block, and several post-encoder decoder blocks to process the input sequentially, and eventually, a un-embedding block to generate the output.
+```
+enc_out = enc_in |> input_block |> [multi_head_self_attention |> add_and_norm |> feed_forward |> add_and_norm] * N
 
-Except for the input block and the un-embedding block, the other blocks are of the same structure, with a multi-head self-attention layer, a feed forward layer, and add and norm layers after each of them. The difference is only in the shape of the input and output of the blocks.
+dec_out = [(dec_out |> multi_head_self_attention |> add_and_norm |> feed_forward |> add_and_norm, enc_out) |> multi_head_cross_attention |> add_and_norm |> feed_forward |> add_and_norm] * N |> un_embedding_block
+```
+
+where `N` is the number of layers in the transformer architecture, `|>` is pipe, and `[...]` is the list of functions that are applied in order.
 
 ### Input Block
 
@@ -44,11 +48,25 @@ This equal may seem arbitrary, but it is chosen to make the positional encoding 
 
 In addition, the positional coding using the sine and cosine functions is chosen because the model can learn to attend to relative positions, since the sine of the sum of two angles can be expressed as a function of the sines and cosines of the angles, and so is the cosine.
 
-### Encoder Block
+### Multi-head Self Attention
 
-#### Multi-head Self Attention
+#### Cross Attention
 
-The self-attention here has been previous introduced in the part of the series about attention mechanisms. However, there is another trick that improves the self-attention mechanism.
+If an attention layer requires to pay attention to a sequence based on another sequence, it is called cross attention. For example, the decoder in the machine translation task should pay attention to the encoder output in order to process the output of previous decoder layers.
+
+The cross attention is calculated by the following formula,
+
+$$
+Q = YW^Q \\
+K = XW^K \\
+V = XW^V \\
+$$
+
+So the cross attention can be calculated the same as the self-attention, but the queries are based on the desired output shape.
+
+#### The Mask Technique
+
+There is another trick that improves the self-attention mechanism.
 
 The `mask` is used to prevent the model from attending to the future tokens in the input sequence. The `mask` is a matrix that is added to the attention scores, and it is calculated by the following formula,
 
@@ -70,7 +88,7 @@ $$
 
 And `mask` should be applied to the attention scores before the soft-max function is applied to the attention scores.
 
-#### Add and Norm
+### Add and Norm
 
 The add and norm operation is a layer that is added after every sub-layer in the transformer architecture. The add and norm operation is defined as,
 
@@ -84,7 +102,7 @@ Residual connections is beneficial for gradient flow because it allows the gradi
 
 This step will be applied after every layer in the transformer architecture. So it will not be repeated in the following sections.
 
-#### Feed Forward
+### Feed Forward
 
 The feed forward layer is a simple layer that is used to transform the input to a higher dimension. The feed forward layer is defined as,
 
@@ -94,52 +112,68 @@ where $x$ is the input to the feed forward layer, $W_1$ and $W_2$ are the weight
 
 The layer is basically just a traditional multi-layer linear neural network with a ReLU activation function.
 
-### Decoder Blocks
-
-#### Pre-Encoder Decoder Block
-
-The pre-encoder decoder block is a block that is used to process the input before the encoder and decoder blocks. For machine translation, the this block processes the previously generated tokens.
-
-#### Next-to-Encoder Block
-
-This block takes both the output of the pre-encoder decoder blocks and the output of the encoder blocks as input, pass them both through a multi-head self-attention layer, and then pass the output through a feed forward layer.
-
-#### Post-Encoder Decoder Block
-
-This block is used to process the input after the encoder and decoder blocks. For machine translation. This just takes the output of the previous block, and pass it through a multi-head self-attention layer and a feed forward layer.
-
 ### Un-Embedding Block
 
-The un-embedding block is the same as the un-embedding from the previous parts of the series.
+Un-embedding block is the same as previous parts. It just converts from embedding back to vocabulary vector, and if needed, further into token ids.
 
 ## Implementation
+
+### Add and Norm
+
+```python
+class AddAndNorm(nn.Module):
+    def __init__(self, dim, dropout):
+        super(AddAndNorm, self).__init__()
+        self.norm = nn.LayerNorm(size)
+        self.dropout = nn.Dropout(dropout)
+    
+    def forward(self, x, y):
+        return self.norm(x + self.dropout(y))
+```
+
+### Feed Forward
+
+```python
+class FeedForward(nn.Module):
+    def __init__(self, size, hidden_size, dropout):
+        super(FeedForward, self).__init__()
+        self.linear1 = nn.Linear(size, hidden_size)
+        self.relu = nn.ReLU()
+        self.linear2 = nn.Linear(hidden_size, size)
+        self.dropout = nn.Dropout(dropout)
+    
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = self.linear2(x)
+        return x
+```
+
+### Multi-head Self Attention
+
+```python
+class SelfAttention(nn.Module):
+
+    def __init__(self, size, dropout)
 
 ### Input Block
 
 ```python
-import torch
-import torch.nn as nn
-import math
-
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super(PositionalEncoding, self).__init__()
-        self.d_model = d_model
-
-        # Create a matrix of shape (max_len, d_model)
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
-
-        # Register buffer ensures 'pe' is not considered a model parameter
-        self.register_buffer('pe', pe)
-
+        self.encoding = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1).float()
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
+        self.encoding[:, 0::2] = torch.sin(position * div_term)
+        self.encoding[:, 1::2] = torch.cos(position * div_term)
+        self.encoding = self.encoding.unsqueeze(0)
+    
     def forward(self, x):
-        # Add positional encoding to input tensor
-        x = x + self.pe[:x.size(0), :]
-        return x
+        return x + self.encoding[:, :x.size(1)].detach()
+```
+
+```python
+
 ```
