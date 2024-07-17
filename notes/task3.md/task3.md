@@ -118,6 +118,49 @@ Un-embedding block is the same as previous parts. It just converts from embeddin
 
 ## Implementation
 
+### Positional Encoding
+
+```python
+class PositionalEncoding(nn.Module):
+    def __init__(self, embedding_dim, max_len=512):
+        super(PositionalEncoding, self).__init__()
+        
+        pe = torch.zeros(max_len, embedding_dim)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, embedding_dim, 2).float() * (-math.log(10000.0) / embedding_dim))
+        
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        
+        pe = pe.unsqueeze(0).transpose(0, 1)  # [max_len, 1, embedding_dim]
+        self.register_buffer('pe', pe)
+        
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return x  # [seq_len, batch_size, embedding_dim]
+```
+
+### Input Block
+
+```python
+class InputBlock(nn.Module):
+    
+    def __init__(
+        self, 
+        vocab: int, 
+        dim: int,
+    ):
+        super(InputBlock, self).__init__()
+        
+        self.token_emb = nn.Embedding(vocab, dim)
+        self.pos_emb = PositionalEncoding(dim)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.token_emb(x)
+        x = self.pos_emb(x)
+        return x
+```
+
 ### Add and Norm
 
 ```python
@@ -129,6 +172,61 @@ class AddAndNorm(nn.Module):
     
     def forward(self, x, y):
         return self.norm(x + self.dropout(y))
+```
+
+### Multi-head Self Attention
+
+```python
+class SelfAttn(nn.Module):
+    def __init__(self, dim: int, dropout: float):
+        super(SelfAttn, self).__init__()
+        
+        self.d = dim
+        
+        self.q = nn.Linear(dim, dim)
+        self.k = nn.Linear(dim, dim)
+        self.v = nn.Linear(dim, dim)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: Tensor, y: Tensor, mask: Tensor | None=None) -> int:
+        # x: (batch, len1, dim)
+        # y: (batch, len2, dim)
+        q = self.q(x)
+        k = self.k(y)
+        v = self.v(y)
+        attn = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(self.d)
+        if mask is not None:
+            attn = attn.masked_fill(mask == 0, -1e-32)
+        attn = torch.nn.functional.softmax(attn, dim=-1)
+        return torch.bmm(self.dropout(attn), v)
+```
+
+```python
+class MultiHeadAttn(nn.Module):
+    
+    def __init__(
+        self, 
+        dim: int, 
+        heads: int, 
+        dropout: float
+    ):
+        super(MultiHeadAttn, self).__init__()
+        
+        self.heads = heads
+        
+        self.attn_heads = nn.ModuleList([
+            SelfAttn(dim, dropout) for _ in range(heads)
+        ])
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(dim * heads, dim)
+
+    def forward(self, x: Tensor, y: Tensor, mask: Tensor | None=None) -> int:
+        attn_outs = [
+            attn(x, y, mask) for attn in self.attn_heads
+        ]
+        return self.fc(
+            torch.cat(attn_outs, dim=-1)
+        )
 ```
 
 ### Feed Forward
@@ -150,30 +248,105 @@ class FeedForward(nn.Module):
         return x
 ```
 
-### Multi-head Self Attention
+### Transformer Block
 
 ```python
-class SelfAttention(nn.Module):
-
-    def __init__(self, size, dropout)
-
-### Input Block
-
-```python
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=5000):
-        super(PositionalEncoding, self).__init__()
-        self.encoding = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len).unsqueeze(1).float()
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
-        self.encoding[:, 0::2] = torch.sin(position * div_term)
-        self.encoding[:, 1::2] = torch.cos(position * div_term)
-        self.encoding = self.encoding.unsqueeze(0)
+class TransformerBlock(nn.Module):
     
-    def forward(self, x):
-        return x + self.encoding[:, :x.size(1)].detach()
+    def __init__(
+        self, 
+        dim: int, 
+        heads: int, 
+        dropout: float
+    ):
+        super(TransformerBlock, self).__init__()
+
+        self.attn = MultiHeadAttn(dim, heads, dropout)
+        self.add_norm_1 = AddAndNorm(dim, dropout)
+        self.ff = FeedForward(dim)
+        self.add_norm_2 = AddAndNorm(dim, dropout)
+    
+    def forward(self, x: Tensor, y: Tensor, mask: Tensor | None=None) -> int:
+        x = self.add_norm_1(x, self.attn(x, y, mask))
+        x = self.add_norm_2(x, self.ff(x))
+        return x
 ```
 
-```python
+### Decoder Block
 
+```python
+class DecoderBlock(nn.Module):
+    
+    def __init__(
+        self, 
+        dim: int, 
+        heads: int, 
+        dropout: float
+    ):
+        super(DecoderBlock, self).__init__()
+        
+        self.attn = MultiHeadAttn(dim, heads, dropout)
+        self.add_and_norm1 = AddAndNorm(dim, dropout)
+        self.encoder_decoder_attn = MultiHeadAttn(dim, heads, dropout)
+        self.add_and_norm2 = AddAndNorm(dim, dropout)
+        self.ff = FeedForward(dim)
+        self.add_and_norm3 = AddAndNorm(dim, dropout)
+    
+    def forward(self, x: Tensor, enc_out: Tensor, trg_mask: Tensor | None=None) -> int:
+        x = self.add_and_norm1(x, self.attn(x, x, trg_mask))
+        x = self.add_and_norm2(
+            x, 
+            self.encoder_decoder_attn(
+                x,
+                enc_out,
+                trg_mask
+            )
+        )
+        x = self.add_and_norm3(x, self.ff(x))
+        return x
+```
+
+### Transformer
+
+```python
+class Transformer(nn.Module):
+    
+    def __init__(
+        self,
+        vocab_src: int,
+        vocab_trg: int,
+        dim: int,
+        heads: int,
+        layers: int,
+        dropout: float
+    ):
+        super(Transformer, self).__init__()
+        self.dim = dim
+        
+        self.input_src = InputBlock(vocab_src, dim)
+        self.transformers_src = nn.ModuleList([
+            TransformerBlock(dim, heads, dropout) for _ in range(layers)
+        ])
+        self.transformers_trg = nn.ModuleList([
+            DecoderBlock(dim, heads, dropout) for _ in range(layers)
+        ])
+        self.fc = nn.Linear(dim, vocab_trg)
+    
+    def generate_mask(self, src: Tensor) -> Tensor:
+        src_len = src.size(1)
+        src_mask = (src != 0).unsqueeze(1).expand(-1, src_len, -1)
+        src_mask = src_mask & src_mask.transpose(1, 2)
+        return src_mask
+
+    def forward(self, src: Tensor, trg_seq_len: int) -> Tensor:
+        src_mask = self.generate_mask(src)
+        embed_src = self.input_src(src)
+        batch_size = src.shape[0]
+        enc_out = embed_src
+        for tf in self.transformers_src:
+            enc_out = tf(enc_out, enc_out, src_mask)
+        dec_out = torch.full((batch_size, trg_seq_len, self.dim), 0.0).to(device)
+        for tf in self.transformers_trg:
+            dec_out = tf(dec_out, enc_out, None)
+        return self.fc(dec_out)
 ```
