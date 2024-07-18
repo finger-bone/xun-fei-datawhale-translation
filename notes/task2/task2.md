@@ -91,11 +91,11 @@ The result is still horrible. Yet, compared to the previous model, the model can
 
 Nevertheless, the model is still scarcely usable.
 
-## Self Attention Mechanism
+## Dot-product Attention Mechanism
 
 ### Query, Key, and Value
 
-Self attention is a mechanism that allows the model to focus on different parts of the input sequence. It takes three inputs, query, key, and value, and returns a weighted sum of the values. The query, key, and value are linear transformations of the input sequence.
+Dot-product attention is a mechanism that allows the model to focus on different parts of the input sequence. It takes three inputs, query, key, and value, and returns a weighted sum of the values. The query, key, and value are linear transformations of the input sequence.
 
 There are three important concepts in the attention mechanism: query, key, and value.
 
@@ -105,9 +105,11 @@ There are three important concepts in the attention mechanism: query, key, and v
 
 - Value, the content vector. It is the part of the sequence that the model should focus on.
 
-### Self Attention Math
+When the query and key derive from the same input, it is called self attention. When the query and key derive from different inputs, it is called cross attention.
 
-In the self attention layer, firstly, a tensor of shape $(len, embed)$ will be transformed into three tensors with the shape $(len, d)$, where $d$ is the dimension, can be arbitrary, usually equal to the dimension of the embedding vector, so that the input and output have the same shape.
+### Dot-product Attention Math
+
+In the attention layer, firstly, a tensor of shape $(len, embed)$ will be transformed into three tensors with the shape $(len, d)$, where $d$ is the dimension, can be arbitrary, usually equal to the dimension of the embedding vector, so that the input and output have the same shape.
 
 Then the math is as follows,
 
@@ -129,7 +131,7 @@ The divisor $\sqrt{d}$ is used to prevent the dot product from being too large, 
 
 ### Implementation
 
-A simple implementation of the self attention mechanism is as follows,
+A simple implementation of the dor-product attention mechanism is as follows,
 
 ```python
 import torch
@@ -161,11 +163,11 @@ class SelfAttention(nn.Module):
         return out
 ```
 
-## Multi-Head Self Attention
+## Multi-Head Attention
 
-The self attention mechanism can be improved by using multiple heads. The multi-head self attention mechanism is a mechanism that allows the model to focus on different parts of the input sequence.
+The attention mechanism can be improved by using multiple heads. The multi-head self attention mechanism is a mechanism that allows the model to focus on different parts of the input sequence.
 
-To put it more simply, the multi-head mechanism is to use multiple self attention layers in parallel, and then concatenate the results. The multi-head mechanism can help the model to focus on different parts of the input sequence.
+To put it more simply, the multi-head mechanism is to use multiple self attention layers in parallel, after splitting the embedding dimension into small chunks, and then concatenate the results. The multi-head mechanism can help the model to focus on different parts of the input sequence.
 
 The math is as follows,
 
