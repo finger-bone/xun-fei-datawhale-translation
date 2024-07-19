@@ -177,7 +177,7 @@ $$
 
 where $\text{Head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$ is a sub-attention, and $W^O$ is a linear transformation.
 
-An simple implementation is as follows,
+An simple implementation is as follows, which is a cross attention because the query and key are different.
 
 ```python
 class MultiHeadAttn(nn.Module):
