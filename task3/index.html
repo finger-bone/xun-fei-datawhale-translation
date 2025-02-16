@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://finger-bone.github.io/rl-crashcourse/task3/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Transformer - Reinforcement Learning Crashcourse</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/color-brewer.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Reinforcement Learning Crashcourse</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem">
+                                <a href="../task1/" class="nav-link">RNN</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../task2/" class="nav-link">Attention</a>
+                            </li>
+                            <li class="navitem active">
+                                <a href="./" class="nav-link">Transformer</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../task2/" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" class="nav-link disabled">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#dawn-of-the-transformer" class="nav-link">Dawn of the Transformer</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#introduction" class="nav-link">Introduction</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#the-transformer-architecture-for-machine-translation" class="nav-link">The Transformer Architecture for Machine Translation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#implementation" class="nav-link">Implementation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#conclusion" class="nav-link">Conclusion</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="dawn-of-the-transformer">Dawn of the Transformer</h1>
+<h2 id="introduction">Introduction</h2>
+<p>The previous part of the series presents traditional NLP models. This part will concern itself with the best NLP model up to date, completely new architecture that will be built from scratch.</p>
+<p>This notebook will introduce the transformer architecture in the order of input to output.</p>
+<p>Transformer architecture is also a multi-encoder-multi-decoder architecture. Some models also only contains the encoder part, which is used for tasks like text classification, whereas some models only contain the decoder part, which is used for tasks like text generation. For machine translation, both encoder and decoder should be used since the text generation and text understanding are both required.</p>
+<h2 id="the-transformer-architecture-for-machine-translation">The Transformer Architecture for Machine Translation</h2>
+<h3 id="general-structure">General Structure</h3>
+<p>We firstly must clearly state the input and output of the transformer architecture in the case of machine translation.</p>
+<p>The input of the encoder the transformer architecture is a sequence of tokens, of shape <code>[batch_size, src_len]</code>, whilst the decoder accepts an input of shape <code>[batch_size, trg_len]</code>. The transformer model will output a sequence of tokens, of shape <code>[batch_size, trg_len, trg_vocab]</code>, which can later be arg-maxed into <code>[batch_size, trg_len]</code>, with each token id in the second dimension being the next token of that position in the decoder input sequence.</p>
+<p>For example, if the input of the decoder is <code>&lt;bos&gt;, Attention, is, all, you</code>, with <code>&lt;bos&gt;</code> as the beginning of the sentence, the output of the transformer model will be <code>Attention, is, all, you, need</code>.</p>
+<p>Then, this part introduces the transformer structure by breaking it down into several parts.</p>
+<p>The general structure is as follows,</p>
+<p><img alt="Transformers Architecture" src="image.png" /></p>
+<p>Which can be expressed as,</p>
+<pre><code>enc_out = enc_in |&gt; input_block |&gt; [multi_head_self_attention |&gt; add_and_norm |&gt; feed_forward |&gt; add_and_norm] * N
+
+dec_out = [(dec_out |&gt; multi_head_self_attention |&gt; add_and_norm |&gt; feed_forward |&gt; add_and_norm, enc_out) |&gt; multi_head_cross_attention |&gt; add_and_norm |&gt; feed_forward |&gt; add_and_norm] * N |&gt; un_embedding_block
+</code></pre>
+<p>where <code>N</code> is the number of layers in the transformer architecture, <code>|&gt;</code> is pipe, and <code>[...]</code> is the list of functions that are applied in order.</p>
+<h3 id="input-block">Input Block</h3>
+<p>Embedding and tokenization have already been introduced in previous parts.</p>
+<p>Except for the normal tokenization and embedding, another important part of the input is the positional encoding in the transformer architecture.</p>
+<p>The necessity of positional encoding is justified by the fact that the transformer architecture does not have any recurrence or convolution, in other words, it doesn't process the input token-by-token, and thus it fails to capture the position of the tokens in the input sequence.</p>
+<p>To deal with the problem, instead of sending in only the embeddings of the tokens, the positional encoding is added to the embeddings. The positional encoding is a vector that is added to the embeddings of the tokens, and it is calculated by the following formula,</p>
+<p>
+<script type="math/tex; mode=display">PE_{(pos, 2i)} = \sin(pos / 10000^{2i / d_{model}})</script>
+</p>
+<p>
+<script type="math/tex; mode=display">PE_{(pos, 2i+1)} = \cos(pos / 10000^{2i / d_{model}})</script>
+</p>
+<p>where <script type="math/tex">pos</script> is the position of the token in the input sequence, <script type="math/tex">i</script> is the index of the dimension of the positional encoding, and <script type="math/tex">d_{model}</script> is the dimension of the model, which equals the dimension of the embeddings.</p>
+<p>This equal may seem arbitrary, but it is chosen to make the positional encoding have a smooth curve, which means that the positional encoding will have a similar value for similar positions.</p>
+<p>In addition, the positional coding using the sine and cosine functions is chosen because the model can learn to attend to relative positions, since the sine of the sum of two angles can be expressed as a function of the sines and cosines of the angles, and so is the cosine.</p>
+<h3 id="multi-head-attention">Multi-head Attention</h3>
+<h4 id="cross-attention">Cross Attention</h4>
+<p>If an attention layer requires to pay attention to a sequence based on another sequence, it is called cross attention. For example, the decoder in the machine translation task should pay attention to the encoder output in order to process the output of previous decoder layers.</p>
+<p>The cross attention is calculated by the following formula,</p>
+<p>
+<script type="math/tex; mode=display">
+Q = YW^Q \\
+K = XW^K \\
+V = XW^V \\
+</script>
+</p>
+<p>So the cross attention can be calculated the same as the self-attention, but the queries are based on the desired output shape.</p>
+<h4 id="the-mask-technique">The Mask Technique</h4>
+<p>There is another trick that improves the self-attention mechanism.</p>
+<p>The <code>mask</code> is used to prevent the model from attending to the future tokens in the input sequence. The <code>mask</code> is a matrix that is added to the attention scores, and it is calculated by the following formula,</p>
+<p>
+<script type="math/tex; mode=display">
+\text{mask}_{ij} = \begin{cases} -\infty & \text{if } j > i \\ 0 & \text{otherwise} \end{cases}
+</script>
+</p>
+<p>where <script type="math/tex">i</script> is the row index and <script type="math/tex">j</script> is the column index of the matrix.</p>
+<p>So the <code>mask</code> is added to the attention scores before the soft-max function is applied to the attention scores, and the model won't attend to the future tokens in the input sequence.</p>
+<p>Furthermore, for special tokens like the padding token, the <code>mask</code> is also used to prevent the model from attending to the padding tokens, which can be done by setting the <code>mask</code> value to <script type="math/tex">-\infty</script> for the padding tokens.</p>
+<p>So to conclude, the mask should be,</p>
+<p>
+<script type="math/tex; mode=display">
+\text{mask}_{ij} = \begin{cases} -\infty & \text{if } j > i \text{ or } \text{input}[i] \text{ is } \text{padding token} \\ 0 & \text{otherwise} \end{cases}
+</script>
+</p>
+<p>And <code>mask</code> should be applied to the attention scores before the soft-max function is applied to the attention scores.</p>
+<h3 id="add-and-norm">Add and Norm</h3>
+<p>The add and norm operation is a layer that is added after every sub-layer in the transformer architecture. The add and norm operation is defined as,</p>
+<p>
+<script type="math/tex; mode=display">\text{AddAndLayerNorm}(x)=\text{LayerNorm}(x + \text{SubLayer}(x))</script>
+</p>
+<p>where <script type="math/tex">x</script> is the input to the sub-layer, and <script type="math/tex">\text{SubLayer}(x)</script> is the output of the sub-layer.</p>
+<p>This operation is used to prevent the model from exploding or vanishing gradients, and it is also used to stabilize the training process.</p>
+<p>Residual connections is beneficial for gradient flow because it allows the gradients to flow through the network without vanishing or exploding.</p>
+<p>This step will be applied after every layer in the transformer architecture. So it will not be repeated in the following sections.</p>
+<h3 id="feed-forward">Feed Forward</h3>
+<p>The feed forward layer is a simple layer that is used to transform the input to a higher dimension. The feed forward layer is defined as,</p>
+<p>
+<script type="math/tex; mode=display">\text{FFN}(x) = \text{ReLU}(xW_1 + b_1)W_2 + b_2</script>
+</p>
+<p>where <script type="math/tex">x</script> is the input to the feed forward layer, <script type="math/tex">W_1</script> and <script type="math/tex">W_2</script> are the weights of the feed forward layer, and <script type="math/tex">b_1</script> and <script type="math/tex">b_2</script> are the biases of the feed forward layer.</p>
+<p>The layer is basically just a traditional multi-layer linear neural network with a ReLU activation function.</p>
+<h3 id="un-embedding-block">Un-Embedding Block</h3>
+<p>Un-embedding block is the same as previous parts. It just converts from embedding back to vocabulary vector, and if needed, further into token ids.</p>
+<h2 id="implementation">Implementation</h2>
+<h3 id="positional-encoding">Positional Encoding</h3>
+<pre><code class="language-python">class PositionalEncoding(nn.Module):
+    def __init__(self, embedding_dim, max_len=512):
+        super(PositionalEncoding, self).__init__()
+
+        pe = torch.zeros(max_len, embedding_dim)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, embedding_dim, 2).float() * (-math.log(10000.0) / embedding_dim))
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0).transpose(0, 1)  # [max_len, 1, embedding_dim]
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return x  # [seq_len, batch_size, embedding_dim]
+</code></pre>
+<h3 id="input-block_1">Input Block</h3>
+<pre><code class="language-python">class PositionalEncoding(nn.Module):
+    def __init__(self, embedding_dim: int, max_len: int=1024):
+        super(PositionalEncoding, self).__init__()
+
+        pe = torch.zeros(max_len, embedding_dim)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, embedding_dim, 2).float() * (-np.log(10000.0) / embedding_dim))
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0).transpose(0, 1)  # [max_len, 1, embedding_dim]
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return x  # [seq_len, batch_size, embedding_dim]
+</code></pre>
+<h3 id="add-and-norm_1">Add and Norm</h3>
+<pre><code class="language-python">class AddAndNorm(nn.Module):
+
+    def __init__(self, embed_d, dropout=0.1):
+        super(AddAndNorm, self).__init__()
+        self.norm = nn.LayerNorm(embed_d)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, y):
+        return self.norm(x + self.dropout(y))
+</code></pre>
+<h3 id="attention">Attention</h3>
+<pre><code class="language-python">class MultiHeadAttn(nn.Module):
+    def __init__(self, d_model, num_heads, dropout=0.1):
+        super(MultiHeadAttn, self).__init__()
+        assert d_model % num_heads == 0, &quot;d_model must be divisible by num_heads&quot;
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
+        self.scale = 1 / np.sqrt(self.d_k)
+
+        self.W_q = nn.Linear(d_model, d_model)
+        self.W_k = nn.Linear(d_model, d_model)
+        self.W_v = nn.Linear(d_model, d_model)
+        self.W_o = nn.Linear(d_model, d_model)
+
+        self.dropout = nn.Dropout(dropout)
+
+    def scaled_dot_product_attention(self, q, k, v, mask=None):
+        attn_scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+        if mask is not None:
+            attn_scores = attn_scores.masked_fill(mask == 0, -1e9)
+        attn_probs = torch.softmax(attn_scores, dim=-1)
+        output = torch.matmul(attn_probs, v)
+        return output
+
+    def split_heads(self, x):
+        batch_size, seq_length, d_model = x.size()
+        return x.view(batch_size, seq_length, self.num_heads, self.d_k).transpose(1, 2)
+
+    def combine_heads(self, x):
+        batch_size, _, seq_length, d_k = x.size()
+        return x.transpose(1, 2).contiguous().view(batch_size, seq_length, self.d_model)
+
+    def forward(self, x, y, mask=None):
+        Q = self.split_heads(self.W_q(x))
+        K = self.split_heads(self.W_k(y))
+        V = self.split_heads(self.W_v(y))
+
+        attn_output = self.scaled_dot_product_attention(Q, K, V, mask)
+        output = self.W_o(self.combine_heads(attn_output))
+        return self.dropout(output)
+</code></pre>
+<h3 id="feed-forward_1">Feed Forward</h3>
+<pre><code class="language-python">class FF(nn.Module):
+
+    def __init__(self, dim: int, hidden_dim: int, dropout: float):
+        super(FF, self).__init__()
+        self.sq = nn.Sequential(
+            nn.Linear(dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, dim)
+        )
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        return self.dropout(self.sq(x))
+</code></pre>
+<h3 id="encoder-block">Encoder Block</h3>
+<pre><code class="language-python">class EncBlock(nn.Module):
+
+    def __init__(self, d: int, num_heads: int, hidden_dim: int, dropout: float):
+        super(EncBlock, self).__init__()
+        self.mha = MultiHeadAttn( d, num_heads, dropout)
+        self.ff = FF(d, hidden_dim, dropout)
+        self.add_norm1 = AddAndNorm(d, dropout)
+        self.add_norm2 = AddAndNorm(d, dropout)
+
+    def forward(self, x, y, mask=None):
+        x = self.add_norm1(x, self.mha(x, y, mask))
+        return self.add_norm2(x, self.ff(x))
+</code></pre>
+<h3 id="decoder-block">Decoder Block</h3>
+<pre><code class="language-python">class DecBlock(nn.Module):
+
+    def __init__(self, d: int=512, num_heads: int=8, hidden_dim: int=1024, dropout: float=0.1):
+        super(DecBlock, self).__init__()
+        self.mha = MultiHeadAttn(d, num_heads, dropout)
+        self.add_and_norm1 = AddAndNorm(d, dropout)
+        self.cross_mha = MultiHeadAttn(d, num_heads, dropout)
+        self.add_and_norm2 = AddAndNorm(d, dropout)
+        self.ff = FF(d, hidden_dim, dropout)
+        self.add_and_norm3 = AddAndNorm(d, dropout)
+
+    def forward(self, x, y, src_mask=None, trg_mask=None):
+        x = self.add_and_norm1(x, self.mha(x, x, trg_mask))
+        x = self.add_and_norm2(x, self.cross_mha(x, y, src_mask))
+        x = self.add_and_norm3(x, self.ff(x))
+        return x
+</code></pre>
+<h3 id="mask-generator">Mask generator</h3>
+<pre><code class="language-python">def generate_mask(src, tgt):
+    src_mask = (src != 0).unsqueeze(1).unsqueeze(2)
+    tgt_mask = (tgt != 0).unsqueeze(1).unsqueeze(3)
+    seq_length = tgt.size(1)
+    nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length, device=device), diagonal=1)).bool()
+    tgt_mask = tgt_mask &amp; nopeak_mask
+    return src_mask, tgt_mask
+</code></pre>
+<h3 id="transformer">Transformer</h3>
+<pre><code class="language-python">class Transformer(nn.Module):
+
+    def __init__(self, src_vocab: int, tgt_vocab: int, d: int=512, num_heads: int=8, hidden_dim: int=2048, num_enc: int=6, num_dec: int=6, dropout: float=0.1):
+        super(Transformer, self).__init__()
+        self.src_embed = InputBlock(d, src_vocab)
+        self.tgt_embed = InputBlock(d, tgt_vocab)
+        self.encs = nn.ModuleList([
+            EncBlock(d, num_heads, hidden_dim, dropout) for _ in range(num_enc)
+        ])
+        self.decs = nn.ModuleList([
+            DecBlock(d, num_heads, hidden_dim, dropout) for _ in range(num_dec)
+        ])
+        self.fc = nn.Linear(d, tgt_vocab)
+
+    def forward(self, src, trg):
+        # src: (batch_size, src_len)
+        # trg: (batch_size, trg_len)
+        src_mask, trg_mask = generate_mask(src, trg)
+        src = self.src_embed(src)
+        trg = self.tgt_embed(trg)
+
+        for enc in self.encs:
+            src = enc(src, src, src_mask)
+        for dec in self.decs:
+            trg = dec(trg, src, src_mask, trg_mask)
+
+        return self.fc(trg)
+</code></pre>
+<h2 id="conclusion">Conclusion</h2>
+<p>This part introduces the transformer architecture, which is the best NLP model up to date. The transformer architecture is a multi-encoder-multi-decoder architecture, and it is used for tasks like machine translation, text classification, and text generation.</p>
+<p>However, the dictionary of the provided data is not used. But we are calling it an end now. The introduction of dictionary can be done by using fine-tuning techniques, manual intervenes, etc.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/jquery-3.6.0.min.js"></script>
+        <script src="../js/bootstrap.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

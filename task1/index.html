@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://finger-bone.github.io/rl-crashcourse/task1/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>RNN - Reinforcement Learning Crashcourse</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/color-brewer.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Reinforcement Learning Crashcourse</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem active">
+                                <a href="./" class="nav-link">RNN</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../task2/" class="nav-link">Attention</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../task3/" class="nav-link">Transformer</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" class="nav-link disabled">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="../task2/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#introduction-to-machine-translation" class="nav-link">Introduction to Machine Translation</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#introduction" class="nav-link">Introduction</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#nlp-and-machine-translation" class="nav-link">NLP and Machine Translation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#major-concepts-in-nlp" class="nav-link">Major Concepts in NLP</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#first-solution-to-machine-translation" class="nav-link">First Solution to Machine Translation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="introduction-to-machine-translation">Introduction to Machine Translation</h1>
+<h2 id="introduction">Introduction</h2>
+<p>Machine translation refers to the automatic translation of text from one language to another. It is a subfield of computational linguistics and artificial intelligence. The goal of machine translation is to produce translations that are fluent and accurate, conveying the meaning of the original text.</p>
+<p>Usually, nowadays, machine translation systems are based on neural networks, which have achieved state-of-the-art performance in many language pairs. These systems are trained on large amounts of parallel text data, which consists of pairs of sentences in two languages.</p>
+<h2 id="nlp-and-machine-translation">NLP and Machine Translation</h2>
+<p>NLP refers to the field of study that focuses on the interactions between computers and humans through natural language. Machine translation is one of the key applications of NLP, as it involves the automatic translation of text from one language to another.</p>
+<p>More generally speaking, NLP consists of four major tasks- sequence-to-sequence modeling, text classification, text generation, and text summarization. Machine translation falls under the sequence-to-sequence modeling category, where the goal is to map an input sequence of words in one language to an output sequence of words in another language.</p>
+<h2 id="major-concepts-in-nlp">Major Concepts in NLP</h2>
+<h3 id="tokenization">Tokenization</h3>
+<p>Tokenization refers to the process of breaking down text into smaller units, such as words or subwords. This is an essential step in many NLP tasks, including machine translation, as it allows the model to process text at a more granular level.</p>
+<p>Usually, tokenization involves splitting text on whitespace or punctuation, but more advanced methods, such as subword tokenization, can be used to handle out-of-vocabulary words.</p>
+<p>Sometimes, there will be special words, aka special tokens, to signal extra information, like start of the sentence, end of the sentence, or padding. A usual way to handle this is to add a special token to the input and output sequences, like <code>&lt;sos&gt;</code> for start of sentence, <code>&lt;eos&gt;</code> for end of sentence, and <code>&lt;pad&gt;</code> for padding.</p>
+<p>Nowadays, the best library to use for NLP is the transformers library, which is built on top of pytorch.</p>
+<p>To create a custom tokenizer in the transformers library, we can use the <code>PreTrainedTokenizer</code> class. A simple example of a custom tokenizer is shown below.</p>
+<pre><code class="language-python">from transformers import PreTrainedTokenizer
+
+class CustomTokenizer(PreTrainedTokenizer):
+    def __init__(self, vocab_file, tokenizer_file):
+        super(CustomTokenizer, self).__init__(vocab_file, tokenizer_file)
+
+    def _tokenize(self, text):
+        return text.split()
+
+    def _convert_token_to_id(self, token):
+        return self.vocab[token]
+
+    def _convert_id_to_token(self, index):
+        return self.ids_to_tokens[index]
+</code></pre>
+<p>To add special tokens to pre-trained tokenizer, we can use the <code>add_special_tokens</code> method. If simply expanding the vocab, use <code>add_tokens</code>. A simple example of adding special tokens to a pre-trained tokenizer is shown below.</p>
+<pre><code class="language-python">from transformers import BertTokenizer
+
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+num_added_tokens = tokenizer.add_tokens([&quot;new_token1&quot;, &quot;my_new-token2&quot;])
+special_tokens_dict = {&quot;cls_token&quot;: &quot;[MY_CLS]&quot;}
+num_added_tokens = tokenizer.add_special_tokens(special_tokens_dict)
+</code></pre>
+<h3 id="embedding">Embedding</h3>
+<p>On a greater level, embedding refers to the process of converting the input to a dense vector representation. This is done by mapping the input to a high-dimensional space, where similar inputs are closer together.</p>
+<p>Below is an example of training an embedding on the MNIST dataset:</p>
+<pre><code class="language-python">import torch as th
+import torch.nn as nn
+from torchvision import datasets, transforms
+
+# get the minst dataset
+def get_mnist_data():
+    # load the data
+    mnist_train = datasets.MNIST('data', train=True, download=True, transform=transforms.ToTensor())
+    mnist_test = datasets.MNIST('data', train=False, download=True, transform=transforms.ToTensor())
+
+    # create the data loaders
+    train_loader = th.utils.data.DataLoader(mnist_train, batch_size=64, shuffle=True)
+    test_loader = th.utils.data.DataLoader(mnist_test, batch_size=64, shuffle=False)
+
+    return train_loader, test_loader
+
+class MNISTEmbedding(nn.Module):
+
+    # To a 2 dimensional space
+    # Use a two-stack of convolutional layers
+    def __init__(self, input_size=28, channels_hidden=32, mlp_hidden = 128):
+        super(MNISTEmbedding, self).__init__()
+        # [btach, 1, x, y]
+        # [batch, 1, x, y] -&gt; [batch, channels_hidden, x, y]
+        self.conv1 = nn.Conv2d(1, channels_hidden, kernel_size=3, stride=1, padding=1)
+        # [batch, channels_hidden, x, y] -&gt; [batch, channels_hidden, x, y]
+        self.conv2 = nn.Conv2d(channels_hidden, channels_hidden, kernel_size=3, stride=1, padding=1)
+        # [batch, channels_hidden, x, y] -&gt; [batch, channels_hidden * x * y]
+        self.flatten = nn.Flatten()
+        # [batch, channels_hidden * x * y] -&gt; [batch, 2]
+        self.mlp = nn.Sequential(
+            nn.Linear(channels_hidden * (input_size ** 2), mlp_hidden),
+            nn.ReLU(),
+            nn.Linear(mlp_hidden, mlp_hidden),
+            nn.ReLU(),
+            nn.Linear(mlp_hidden, 2)
+        )
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.flatten(x)
+        x = self.mlp(x)
+        return x
+
+class MNISTModel(nn.Module):
+
+    def __init__(self, input_size=28, channels_hidden=32, mlp_hidden=128, embedding_to_result_hidden = 32):
+        super(MNISTModel, self).__init__()
+        self.embedding = MNISTEmbedding(input_size, channels_hidden, mlp_hidden)
+        self.lc_in = nn.Linear(2, embedding_to_result_hidden)
+        self.relu = nn.ReLU()
+        self.lc_out = nn.Linear(embedding_to_result_hidden, 10)
+
+    def forward(self, x):
+        x = self.embedding(x)
+        x = self.lc_in(x)
+        x = self.relu(x)
+        x = self.lc_out(x)
+        return x
+
+# train the model
+device = &quot;mps&quot;
+train_loader, test_loader = get_mnist_data()
+model = MNISTModel().to(device=device, dtype=th.float32)
+optimizer = th.optim.Adam(model.parameters(), lr=1e-4)
+
+epochs = 20
+logging_steps = 400
+
+from tqdm.notebook import tqdm, trange
+
+for epoch in trange(epochs):
+    for i, (x, y) in enumerate(tqdm(train_loader)):
+        x = x.to(device=device, dtype=th.float32)
+        y = y.to(device=device, dtype=th.float32)
+
+        optimizer.zero_grad()
+        y_pred = model(x)
+        loss = th.nn.functional.cross_entropy(y_pred, y.long())
+        loss.backward()
+        optimizer.step()
+
+        if i % logging_steps == 0:
+            print(f&quot;Epoch {epoch}, step {i}, loss {loss.item()}&quot;)
+
+model = model.eval()
+embedding = model.embedding
+
+# Convert test data to embedding vectors
+embeddings = []
+labels = []
+for x, y in tqdm(test_loader):
+    x = x.to(device=device, dtype=th.float32)
+    y = y.to(device=device, dtype=th.float32)
+    with th.no_grad():
+        e = embedding(x)
+    # flatten the batch dimension
+    # detach then extend
+    embeddings.extend(e.detach().cpu().numpy().tolist())
+    labels.extend(y.detach().cpu().numpy().tolist())
+
+labels = list(map(lambda x: int(x), labels))
+import plotly.express as px
+import pandas as pd
+
+# Plot the embeddings with plotly
+df = pd.DataFrame(embeddings, columns=[&quot;x&quot;, &quot;y&quot;])
+df[&quot;label&quot;] = list(map(str, labels))
+# labels are discrete, so we can use category
+fig = px.scatter(df, x=&quot;x&quot;, y=&quot;y&quot;, color=&quot;label&quot;, opacity=0.7, category_orders={&quot;label&quot;: [str(i) for i in range(10)]})
+# enlarge the size of the graph
+fig.update_layout(width=800, height=600)
+fig.show()
+</code></pre>
+<p>The embedding can be visualized as shown below:</p>
+<p><img alt="MNIST Embedding" src="MINSTEmbedding.png" /></p>
+<p>In NLP, embeddings is largely word embeddings, which are dense vector representations of words. These embeddings are trained on large amounts of text data and capture semantic and syntactic information about words.</p>
+<p>There is a simpler ways to create embedding models with <code>torch.nn.Embedding</code>:</p>
+<pre><code class="language-python"># Create an embedding layer with 1000 words and 100 dimensions
+embedding = nn.Embedding(1000, 100)
+</code></pre>
+<p>The input of the embedding layer is the index of the word in the vocabulary, that is, a vector of integers. The output of the embedding layer is a dense vector representation of the word, which can be used as input to a neural network model.</p>
+<p>Embeddings converts the input to a dense vector representation, which can be used as input to a neural network model. Taking the output of the middle layer of a neural network model, we also get an embedding of the output. </p>
+<h3 id="encoder-decoder">Encoder-Decoder</h3>
+<p>Encoder and decoder are two components of a sequence-to-sequence model. The encoder takes an input sequence and encodes it into a fixed-length vector representation, which is then passed to the decoder to generate the output sequence.</p>
+<p>For example, the encoder can be a model that takes an input sentence in English and encodes it into a fixed-length vector representation, which is then passed to the decoder to generate the next token in the output sentence. Usually doing so in a loop until decoder generates the end of sentence token.</p>
+<h3 id="rnn">RNN</h3>
+<p>RNNs, or Recurrent Neural Networks, are a type of neural network that is designed to handle sequential data. They are particularly well-suited for tasks such as machine translation, where the input and output sequences are of variable length.</p>
+<p>A simple RNN model in pytorch is shown below:</p>
+<pre><code class="language-python">import torch
+import torch.nn as nn
+
+class RNN(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(RNN, self).__init__()
+        self.hidden_size = hidden_size
+        self.i2h = nn.Linear(input_size + hidden_size, hidden_size)
+        self.i2o = nn.Linear(input_size + hidden_size, output_size)
+        self.softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, input, hidden):
+        combined = torch.cat((input, hidden), 1)
+        hidden = self.i2h(combined)
+        output = self.i2o(combined)
+        output = self.softmax(output)
+        return output, hidden
+
+    def initHidden(self):
+        return torch.zeros(1, self.hidden_size)
+</code></pre>
+<p>That is, there are two states in the RNN model, the hidden state and the output state. The hidden state is updated by the input and the previous hidden state, and the output state is updated by the input and the hidden state. During each passing, the hidden state and the output state are updated together.</p>
+<p>A more commonly used model is the LSTM, long-short term memory model, which is an improved version of the RNN model. The LSTM model has a cell state, which allows it to remember information over long sequences.</p>
+<p>There is also a RNN model called GRU, gated recurrent unit, which is a simplified version of the LSTM model, also very useful in NLP tasks.</p>
+<p>LSTM and GRU models are built-in in pytorch.</p>
+<h2 id="first-solution-to-machine-translation">First Solution to Machine Translation</h2>
+<p>The first solution would be a encoder-RNN-decoder model. The encoder takes the input sentence and encodes it into a fixed-length vector representation, which is then passed to the decoder to generate the output sentence.</p>
+<p>A basic encoder-decoder model is implemented under the code, task one folder. Which, doesn't perform well- or any at all, but it is a good starting point to understand the basic concepts of machine translation.</p>
+<p>Please notice that this is a oversimplified version that doesn't even perform in the task. And no terminology-based method, as the contest requires, is used in this model. Terminologies are only used to expand the vocabulary of the model. This is different from the provided model.</p>
+<h3 id="dataloader">Dataloader</h3>
+<p>First, load the data.</p>
+<pre><code class="language-python">class MTTrainDataset(Dataset):
+
+
+    def __init__(self, train_path, dic_path):
+        self.terms = [
+            {&quot;en&quot;: l.split(&quot;\t&quot;)[0], &quot;zh&quot;: l.split(&quot;\t&quot;)[1]} for l in open(dic_path).read().split(&quot;\n&quot;)[:-1]
+        ]
+        self.data = [
+            {&quot;en&quot;: l.split(&quot;\t&quot;)[0], &quot;zh&quot;: l.split(&quot;\t&quot;)[1]} for l in open(train_path).read().split(&quot;\n&quot;)[:-1]
+        ]
+        self.en_tokenizer = AutoTokenizer.from_pretrained(&quot;google-bert/bert-base-uncased&quot;, cache_dir=&quot;../../../cache&quot;)
+        self.ch_tokenizer = AutoTokenizer.from_pretrained(&quot;google-bert/bert-base-chinese&quot;, cache_dir=&quot;../../../cache&quot;)
+        self.en_tokenizer.add_tokens([
+            term[&quot;en&quot;] for term in self.terms
+        ])
+        self.ch_tokenizer.add_tokens([
+            term[&quot;zh&quot;] for term in self.terms
+        ])
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index) -&gt; dict:
+        return {
+            &quot;en&quot;: self.en_tokenizer.encode(self.data[index][&quot;en&quot;]),
+            &quot;zh&quot;: self.ch_tokenizer.encode(self.data[index][&quot;zh&quot;]),
+        }
+
+    def get_raw(self, index):
+        return self.data[index]
+
+ds = MTTrainDataset(&quot;./data/train.txt&quot;, &quot;./data/en-zh.dic&quot;)
+</code></pre>
+<h3 id="encoder">Encoder</h3>
+<p>Create the encoder, encoder first does embedding, then use RNN to encode the input.</p>
+<pre><code class="language-python"># Encoder encodes the input sequence into a sequence of hidden states
+class Encoder(nn.Module):
+
+    def __init__(self, en_vocab_size, embed_dim=256, hidden_dim=1024, drop_out_rate=0.1):
+        super(Encoder, self).__init__()
+        self.hidden_dim = hidden_dim
+        # [batch, len] -&gt; [batch, len, embed_dim]
+        self.embed = nn.Embedding(en_vocab_size, embed_dim)
+        # [len, batch, embed_dim] -&gt; [len, batch, hidden_dim], [n_layers == 1, batch, hidden_dim]
+        self.gru = nn.GRU(embed_dim, hidden_dim)
+        self.dropout = nn.Dropout(drop_out_rate)
+
+    def init_hidden(self, batch_size):
+        # [n_layers == 1, batch, hidden_dim]
+        return th.zeros(1, batch_size, self.hidden_dim).to(device)
+
+    def forward(self, x):
+        x = self.embed(x)
+        x = self.dropout(x)
+        h = self.init_hidden(x.size(0))
+
+</code></pre>
+<h3 id="decoder">Decoder</h3>
+<p>Then the decoder. Please notice that, the decoder only outputs the next token in the output sequence. In the forward function, <code>x</code> is the input token, the translated token sequence to be in the context, and <code>h</code> is the encoded hidden state of the original input sequence, which contains the information of the input sequence.</p>
+<pre><code class="language-python">class Decoder(nn.Module):
+
+    def __init__(self, zh_vocab_size, embed_dim=256, hidden_dim=1024, drop_out_rate=0.1) -&gt; None:
+        super().__init__()
+        # [batch, len == 1] -&gt; [batch, len == 1, embed_dim]
+        self.embed = nn.Embedding(zh_vocab_size, embed_dim)
+        # [batch, len == 1, embed_dim] -&gt; [batch, len == 1, hidden_dim], [n_layers, batch, hidden_dim]
+        self.gru = nn.GRU(embed_dim, hidden_dim)
+        # [batch, hidden_dim] -&gt; [batch, zh_vocab_size]
+        self.fc = nn.Linear(hidden_dim, zh_vocab_size)
+        self.dropout = nn.Dropout(drop_out_rate)
+
+    def forward(self, x, h):
+        x = self.embed(x)
+        x = self.dropout(x)
+        x = x.permute(1, 0, 2)
+        x, h = self.gru(x, h)
+        x = x.permute(1, 0, 2)
+        x = self.fc(x.squeeze(1))
+        return x, h
+</code></pre>
+<h3 id="seq2seq-model">Seq2Seq Model</h3>
+<p>Then create the model, which is a combination of the encoder and the decoder.</p>
+<pre><code class="language-python">class Seq2Seq(nn.Module):
+
+    def __init__(self, encoder, decoder):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, src, trg, src_tokenizer, trg_tokenizer, teacher_forcing_ratio=0.5):
+        # src: [batch, src_len]
+        # trg: [batch, target_len]
+        batch_size = src.size(0)
+        trg_len = trg.size(1)
+        trg_vocab_size = self.decoder.fc.out_features
+        outputs = th.ones(batch_size, trg_len, trg_vocab_size).mul(trg_tokenizer.cls_token_id).to(src.device)
+        # encoder
+        # enc_out: [batch, src_len, hidden_dim], enc_hidden: [n_layers, batch, hidden_dim]
+        enc_out, enc_hidden = self.encoder(src)
+        # decoder
+        # dec_in: [batch, 1]
+        dec_in = trg[:, 0]
+        dec_hidden = enc_hidden
+        for t in range(1, trg_len):
+            dec_out, dec_hidden = self.decoder(dec_in.unsqueeze(1), dec_hidden)
+            # dec_out: [batch, zh_vocab_size]
+            outputs[:, t] = dec_out.squeeze(1)
+            # dec_in: [batch]
+            dec_in = dec_out.argmax(-1)
+            if th.rand(1) &lt; teacher_forcing_ratio:
+                dec_in = trg[:, t]
+            if (dec_in == trg_tokenizer.sep_token_id).all():
+                if t &lt; trg_len - 1:
+                    outputs[:, t+1] = trg_tokenizer.sep_token_id
+                    outputs[:, t+2:] = trg_tokenizer.pad_token_id
+                break
+        return outputs
+</code></pre>
+<p>Teacher forcing means to use the answer token as the input token in the next time slice when generating the output sequence. This is to help the model to learn the correct translation sequence faster. When doing actual generation, the ratio should be set to zero, so that the model can generate the sequence on its own.</p>
+<p>This code uses bert tokenizer, so the beginning of sentence is actually <code>cls</code> token, whereas the end of sentence is <code>sep</code> token. Please note that these special tokens have special usage in the bert model, but we only treat them as <code>bos</code> and <code>eos</code> here.</p>
+<h3 id="padding">Padding</h3>
+<p>Before training, also pad the input to train in batches.</p>
+<pre><code class="language-python">def collect_fn(batch):
+    # pad the batch
+    src = [th.tensor(item[&quot;en&quot;]) for item in batch]
+    trg = [th.tensor(item[&quot;zh&quot;]) for item in batch]
+    src = th.nn.utils.rnn.pad_sequence(src, batch_first=True, padding_value=ds.en_tokenizer.pad_token_id)
+    trg = th.nn.utils.rnn.pad_sequence(trg, batch_first=True, padding_value=ds.ch_tokenizer.pad_token_id)
+    return src, trg
+</code></pre>
+<h3 id="training">Training</h3>
+<p>Use train the model with the following code, remember to set <code>ignore_index</code> in the loss function to ignore the padding token.</p>
+<pre><code class="language-python">def train(epochs, total = None, logging_steps=100):
+    loss_logging = []
+    criterion = nn.CrossEntropyLoss(ignore_index=ds.ch_tokenizer.pad_token_id)
+    for epoch in trange(epochs):
+        for i, (src, trg) in tqdm(enumerate(train_loader), total=total if total is not None else len(train_loader), leave=False):
+            optim.zero_grad()
+            src = src.to(device)
+            trg = trg.to(device)
+            out = model(src, trg, ds.en_tokenizer, ds.ch_tokenizer, teacher_forcing_ratio=0.5)
+            # out is [batch, len, zh_vocab_size]
+            # trg is [batch, len]
+            loss = criterion(out.view(-1, len(ds.ch_tokenizer)), trg.view(-1))
+            loss_logging.append(loss.item())
+            loss.backward()
+            optim.step()
+            if i % logging_steps == 0:
+                print(f&quot;Epoch: {epoch}, Step: {i}, Loss: {loss.item()}&quot;)
+            if total is not None and i &gt;= total:
+                break
+    return loss_logging
+</code></pre>
+<h3 id="generating">Generating</h3>
+<pre><code class="language-python">def generate(src, trg):
+    with th.no_grad():
+        src = th.tensor(src).unsqueeze(0).to(device)
+        trg = th.tensor(trg).unsqueeze(0).to(device)
+        out = model(src, trg, ds.en_tokenizer, ds.ch_tokenizer, teacher_forcing_ratio=0)
+    # out is [batch, len, zh_vocab_size]
+    out = out.squeeze(0)
+    out = out.argmax(-1)
+    return ds.ch_tokenizer.decode(out.tolist())
+</code></pre>
+<h3 id="results">Results</h3>
+<p>Well the result sucks, but it works. So long as there is a <code>[SEP]</code> in most of the generated result, it is a good sign that the model is learning to generate the sequence, despite its poor performance.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/jquery-3.6.0.min.js"></script>
+        <script src="../js/bootstrap.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
