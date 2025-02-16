@@ -14,7 +14,7 @@ However, that model got the greater part of the job done. The model was trained 
 
 Attention mechanism, to put simply, is to weight the importance of different parts of the input sequence. It is a mechanism that allows the model to focus on different parts of the input sequence.
 
-A obvious way to improve the encoder-decoder model is to add an extra attention layer in between the encoder and decoder. The attention layer will help the decoder to focus on different parts of the input sequence.
+An obvious way to improve the encoder-decoder model is to add an extra attention layer in between the encoder and decoder. The attention layer will help the decoder to focus on different parts of the input sequence.
 
 An example is as below,
 
