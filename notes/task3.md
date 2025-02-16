@@ -22,7 +22,7 @@ Then, this part introduces the transformer structure by breaking it down into se
 
 The general structure is as follows,
 
-![Transformers Architecture](image.png)
+![Transformers Architecture](task3/image.png)
 
 Which can be expressed as,
 

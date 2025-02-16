@@ -20,7 +20,6 @@ Tokenization refers to the process of breaking down text into smaller units, suc
 
 Usually, tokenization involves splitting text on whitespace or punctuation, but more advanced methods, such as subword tokenization, can be used to handle out-of-vocabulary words.
 
-
 Sometimes, there will be special words, aka special tokens, to signal extra information, like start of the sentence, end of the sentence, or padding. A usual way to handle this is to add a special token to the input and output sequences, like `<sos>` for start of sentence, `<eos>` for end of sentence, and `<pad>` for padding.
 
 Nowadays, the best library to use for NLP is the transformers library, which is built on top of pytorch.
@@ -180,7 +179,7 @@ fig.show()
 
 The embedding can be visualized as shown below:
 
-![MNIST Embedding](MINSTEmbedding.png)
+![MNIST Embedding](task1/MINSTEmbedding.png)
 
 In NLP, embeddings is largely word embeddings, which are dense vector representations of words. These embeddings are trained on large amounts of text data and capture semantic and syntactic information about words.
 
@@ -384,7 +383,7 @@ class Seq2Seq(nn.Module):
 
 Teacher forcing means to use the answer token as the input token in the next time slice when generating the output sequence. This is to help the model to learn the correct translation sequence faster. When doing actual generation, the ratio should be set to zero, so that the model can generate the sequence on its own.
 
-This code uses bert tokenizer, so the beginning of sentence is actually `cls` token, whereas the end of sentence is `sep` token.
+This code uses bert tokenizer, so the beginning of sentence is actually `cls` token, whereas the end of sentence is `sep` token. Please note that these special tokens have special usage in the bert model, but we only treat them as `bos` and `eos` here.
 
 ### Padding
 
