@@ -1,6 +1,6 @@
 site_name: Introduction to Machine Translation
 site_url: https://finger-bone.github.io/xun-fei-datawahle-translation/
-site_description: A tutorial on NN-based machine translation
+site_description: Introduction to NN-based machine translation
 
 theme:
   name: lux
