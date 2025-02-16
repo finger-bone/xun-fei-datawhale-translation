@@ -1,4 +1,4 @@
-site_name: Machine Translation
+site_name: Introduction to Machine Translation
 site_url: https://finger-bone.github.io/xun-fei-datawahle-translation/
 site_description: A tutorial on NN-based machine translation
 
@@ -11,9 +11,9 @@ theme:
 docs_dir: notes
 
 nav:
-- RNN: task1/task1.md
-- Attention: task2/task2.md
-- Transformer: task3/task3.md
+- RNN: "task1/task1.md"
+- Attention: "task2/task2.md"
+- Transformer: "task3/task3.md"
 
 extra_javascript:
 - https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML
